@@ -1,6 +1,13 @@
-function [mklmodel] = train_mkl(y,x,phis,liblinear_param)
+function [mklmodel] = train_mkl(y,x,phis,liblinear_param,varargin)
+
+nfold = 0;
+if length(varargin) == 2
+	nfold = varargin{2};
+end
+
 m = length(phis);
 
+x = full(x);
 for i=1:m
 	phi = phis{i};
 	xadd = phi(x);
@@ -13,14 +20,16 @@ for i=1:m
 	end
 	xs(:,fstart(i):fend(i)) = xadd;
 end
+xs = sparse(xs);
 
 nclass = length(unique(y));
 classes = sort(unique(y));
+maxiter = 100;
 
 if nclass == 2
 	d = ones(1,m) ./ m;
 	iter = 1;
-	while true && iter < 100
+	while true && iter < maxiter
 		iter = iter + 1;
 		ds = [];
 		for i=1:m
@@ -37,15 +46,20 @@ if nclass == 2
 			newd(i) = fh(i) / sum(fh);
 		end
 
-		if norm(newd - d,2) < 1e-3
+		if norm(newd - d,2) < 0.1
 			d = newd;
 			break;
 		end
 		d = newd;
 	end
-	mklmodel.model = model;
-	mklmodel.d = d;
-	mklmodel.classes = [];
+	if nfold == 0
+		mklmodel.model = model;
+		mklmodel.d = d;
+		mklmodel.classes = [];
+		mklmodel.phis = phis;
+	else
+		mklmodel = train(ds',y,xs,sprintf('%s -v %d',liblinear_param,nfold));
+	end
 elseif nclass > 2
 	yc = zeros(length(y),1);
 	for j = 1:nclass
@@ -53,7 +67,7 @@ elseif nclass > 2
 		iter = 1;
 		yc(find(y == classes(j))) = 1;
 		yc(find(y ~= classes(j))) = -1;
-		while true && iter < 100
+		while true && iter < maxiter
 			iter = iter + 1;
 			ds = [];
 			for i=1:m
@@ -80,8 +94,8 @@ elseif nclass > 2
 		mklmodel.d{j} = d;
 	end
 	mklmodel.classes = classes;
+	mklmodel.phis = phis;
 else
 	disp('Error');
 	mklmodel = [];
 end
-mklmodel.phis = phis;
